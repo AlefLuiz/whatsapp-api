@@ -259,13 +259,12 @@ export class WAStartupService {
 
   private async sendDataWebhook<T = any>(event: WebhookEventsType, data: T) {
     const eventDesc = WebhookEventsEnum[event];
-
+    let _response = undefined;
     try {
       if (
         this.webhook?.enabled &&
         isURL(this.webhook?.url, { protocols: ['http', 'https'] })
       ) {
-        let _response = undefined;
         if (this.webhook?.events && this.webhook?.events[event]) {
           _response = await axios.post(
             this.webhook.url,
@@ -288,7 +287,6 @@ export class WAStartupService {
             { headers: { 'Resource-Owner': this.instance.ownerJid } },
           );
         }
-        return _response ? _response.status : undefined;
       }
     } catch (error) {
       const axiosError = error as AxiosError;
@@ -313,7 +311,7 @@ export class WAStartupService {
     try {
       const globalWebhook = this.configService.get<GlobalWebhook>('GLOBAL_WEBHOOK');
       if (globalWebhook?.ENABLED && isURL(globalWebhook.URL)) {
-        return await axios.post(
+        await axios.post(
           globalWebhook.URL,
           {
             event: eventDesc,
@@ -342,6 +340,7 @@ export class WAStartupService {
         description: 'Error on send data to webhook',
       });
     }
+    return _response ? _response.status : undefined;
   }
 
   private async connectionUpdate({
