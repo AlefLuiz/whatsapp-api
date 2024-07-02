@@ -44,6 +44,7 @@ import {
   readMessageForIdSchema,
   readMessageSchema,
   rejectCallSchema,
+  retrySentWebHookSchema,
   updatePresenceSchema,
   whatsappNumberSchema,
 } from '../../validate/validate.schema';
@@ -81,6 +82,15 @@ export function ChatRouter(chatController: ChatController, ...guards: RequestHan
         request: req,
         schema: readMessageSchema,
         execute: (instance, data) => chatController.readMessage(instance, data),
+      });
+
+      return res.status(HttpStatus.OK).json(response);
+    })
+    .put(routerPath('retryWebhook'), ...guards, async (req, res) => {
+      const response = await dataValidate<InstanceDto>({
+        request: req,
+        schema: retrySentWebHookSchema,
+        execute: (instance) => chatController.retrySentWebHook(instance),
       });
 
       return res.status(HttpStatus.OK).json(response);

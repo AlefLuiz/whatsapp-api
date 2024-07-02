@@ -105,4 +105,8 @@ export class ChatController {
   public async rejectCall({ instanceName }: InstanceDto, data: RejectCallDto) {
     return await this.waMonitor.waInstances.get(instanceName).rejectCall(data);
   }
+
+  public async retrySentWebHook({ instanceName }: InstanceDto) {
+    return await this.waMonitor.waInstances.get(instanceName).retrySentWebHook();
+  }
 }

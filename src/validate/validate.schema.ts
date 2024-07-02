@@ -135,7 +135,10 @@ export const mediaMessageSchema: JSONSchema7 = {
     mediaMessage: {
       type: 'object',
       properties: {
-        mediatype: { type: 'string', enum: ['image', 'document', 'video', 'audio', 'sticker'] },
+        mediatype: {
+          type: 'string',
+          enum: ['image', 'document', 'video', 'audio', 'sticker'],
+        },
         media: { type: 'string' },
         fileName: { type: 'string' },
         caption: { type: 'string' },
@@ -153,7 +156,10 @@ export const mediaFileMessageSchema: JSONSchema7 = {
   properties: {
     number: { ...numberDefinition },
     caption: { type: 'string' },
-    mediatype: { type: 'string', enum: ['image', 'document', 'video', 'audio', 'sticker'] },
+    mediatype: {
+      type: 'string',
+      enum: ['image', 'document', 'video', 'audio', 'sticker'],
+    },
     presence: { type: 'string', enum: ['composing', 'recording'] },
     delay: { type: 'string' },
   },
@@ -624,4 +630,13 @@ export const typebotFindSessionSchema: JSONSchema7 = {
     action: { type: 'string', enum: ['open', 'closed', 'paused'] },
   },
   ...isNotEmpty('sessionId', 'action', 'remoteJid'),
+};
+
+export const retrySentWebHookSchema: JSONSchema7 = {
+  $id: v4(),
+  type: 'object',
+  properties: {
+    sent: { type: 'array' },
+  },
+  ...isNotEmpty('sent'),
 };

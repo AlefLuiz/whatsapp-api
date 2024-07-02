@@ -265,8 +265,9 @@ export class WAStartupService {
         this.webhook?.enabled &&
         isURL(this.webhook?.url, { protocols: ['http', 'https'] })
       ) {
+        let _response = undefined;
         if (this.webhook?.events && this.webhook?.events[event]) {
-          await axios.post(
+          _response = await axios.post(
             this.webhook.url,
             {
               event: eventDesc,
@@ -277,7 +278,7 @@ export class WAStartupService {
           );
         }
         if (!this.webhook?.events) {
-          await axios.post(
+          _response = await axios.post(
             this.webhook.url,
             {
               event: eventDesc,
@@ -287,6 +288,7 @@ export class WAStartupService {
             { headers: { 'Resource-Owner': this.instance.ownerJid } },
           );
         }
+        return _response ? _response.status : undefined;
       }
     } catch (error) {
       const axiosError = error as AxiosError;
@@ -311,7 +313,7 @@ export class WAStartupService {
     try {
       const globalWebhook = this.configService.get<GlobalWebhook>('GLOBAL_WEBHOOK');
       if (globalWebhook?.ENABLED && isURL(globalWebhook.URL)) {
-        await axios.post(
+        return await axios.post(
           globalWebhook.URL,
           {
             event: eventDesc,
@@ -803,6 +805,9 @@ export class WAStartupService {
 
           if (find?.id) {
             messageRaw.id = find.id;
+          } else {
+            const { id } = await this.repository.message.create({ data: messageRaw });
+            messageRaw.id = id;
           }
         }
 
@@ -810,8 +815,15 @@ export class WAStartupService {
 
         this.logger.log('Type: ' + type);
         console.log(messageRaw);
-
-        await this.sendDataWebhook('messagesUpsert', messageRaw);
+        const success_webhook = await this.sendDataWebhook('messagesUpsert', messageRaw);
+        if (success_webhook != 200) {
+          await this.repository.message.update({
+            where: { id: messageRaw.id },
+            data: {
+              consumed: false,
+            },
+          });
+        }
 
         if (s3Service.BUCKET?.ENABLE) {
           try {
@@ -1819,6 +1831,47 @@ export class WAStartupService {
     return await this.repository.chat.findMany({
       where: { instanceId: this.instance.id },
     });
+  }
+
+  public async retrySentWebHook() {
+    const not_consumed = await this.repository.message.findMany({
+      orderBy: {
+        id: 'asc',
+      },
+      where: { consumed: false },
+    });
+    const messages_sent = [];
+    console.log('Retry sent : ' + not_consumed.length);
+    for (const message of not_consumed) {
+      const messageRaw = {
+        keyId: message.keyId,
+        keyRemoteJid: message.keyRemoteJid,
+        keyFromMe: message.keyFromMe,
+        pushName: message.pushName,
+        messageType: message.messageType,
+        content: message.content as PrismType.Prisma.JsonValue,
+        messageTimestamp: message.messageTimestamp as number,
+        instanceId: message.instanceId,
+      } as PrismType.Message;
+
+      const success_webhook = await this.sendDataWebhook('messagesUpsert', messageRaw);
+      if (success_webhook != 200) {
+        throw new InternalServerErrorException('Webhook not connected!');
+      } else {
+        await this.repository.message.update({
+          where: { id: message.id },
+          data: {
+            consumed: true,
+          },
+        });
+        messages_sent.push(messageRaw);
+      }
+    }
+    return {
+      status: 'success',
+      count: messages_sent.length,
+      messages: messages_sent,
+    };
   }
 
   public async rejectCall(data: RejectCallDto) {
