@@ -1172,6 +1172,7 @@ export class WAStartupService {
         profilePictureUrl: await this.client.profilePictureUrl(jid, 'image'),
       };
     } catch (error) {
+      console.log(error);
       return {
         wuid: jid,
         profilePictureUrl: null,
@@ -1834,11 +1835,14 @@ export class WAStartupService {
   }
 
   public async retrySentWebHook() {
+    const _instance = await this.repository.instance.findUnique({
+      where: { name: this.instanceName },
+    });
     const not_consumed = await this.repository.message.findMany({
       orderBy: {
         id: 'asc',
       },
-      where: { consumed: false },
+      where: { consumed: false, instanceId: _instance.id },
     });
     const messages_sent = [];
     console.log('Retry sent : ' + not_consumed.length);
