@@ -343,6 +343,93 @@ export class WAStartupService {
     return _response ? _response.status : undefined;
   }
 
+  private async retrySendDataWebhook<T = any>(
+    event: WebhookEventsType,
+    data: T,
+    instance: Instance,
+    webhook: Webhook,
+  ) {
+    const eventDesc = WebhookEventsEnum[event];
+    let _response = undefined;
+    try {
+      if (webhook?.enabled && isURL(webhook?.url, { protocols: ['http', 'https'] })) {
+        if (webhook?.events && webhook?.events[event]) {
+          _response = await axios.post(
+            webhook.url,
+            {
+              event: eventDesc,
+              instance: instance,
+              data,
+            },
+            { headers: { 'Resource-Owner': instance.ownerJid } },
+          );
+        }
+        if (!webhook?.events) {
+          _response = await axios.post(
+            webhook.url,
+            {
+              event: eventDesc,
+              instance: instance,
+              data,
+            },
+            { headers: { 'Resource-Owner': instance.ownerJid } },
+          );
+        }
+      }
+    } catch (error) {
+      const axiosError = error as AxiosError;
+      const records = this.logger.error({
+        local: 'sendDataWebhook-local',
+        message: axiosError?.message,
+        hostName: error?.hostname,
+        code: axiosError?.code,
+        headers: JSON.stringify(axiosError?.request?.headers || {}),
+        data: JSON.stringify(axiosError?.response?.data || {}),
+        stack: error?.stack,
+        name: error?.name,
+      });
+      this.repository.createLogs(this.instance.name, {
+        content: records,
+        type: 'error',
+        context: WAStartupService.name,
+        description: 'Error on send data to webhook',
+      });
+    }
+
+    try {
+      const globalWebhook = this.configService.get<GlobalWebhook>('GLOBAL_WEBHOOK');
+      if (globalWebhook?.ENABLED && isURL(globalWebhook.URL)) {
+        await axios.post(
+          globalWebhook.URL,
+          {
+            event: eventDesc,
+            instance: this.instance,
+            data,
+          },
+          { headers: { 'Resource-owner': this.instance.ownerJid } },
+        );
+      }
+    } catch (error) {
+      const axiosError = error as AxiosError;
+      const records = this.logger.error({
+        local: 'sendDataWebhook-global',
+        message: axiosError?.message,
+        hostName: error?.hostname,
+        code: axiosError?.code,
+        headers: JSON.stringify(axiosError?.request?.headers || {}),
+        data: JSON.stringify(axiosError?.response?.data || {}),
+        stack: error?.stack,
+        name: error?.name,
+      });
+      this.repository.createLogs(this.instance.name, {
+        content: records,
+        type: 'error',
+        context: WAStartupService.name,
+        description: 'Error on send data to webhook',
+      });
+    }
+    return _response ? _response.status : undefined;
+  }
   private async connectionUpdate({
     qr,
     connection,
@@ -1838,11 +1925,14 @@ export class WAStartupService {
     const _instance = await this.repository.instance.findUnique({
       where: { name: this.instanceName },
     });
+    const _webhook = await this.repository.webhook.findUnique({
+      where: { instanceId: _instance.id },
+    });
     const not_consumed = await this.repository.message.findMany({
       orderBy: {
         id: 'asc',
       },
-      where: { consumed: false, instanceId: _instance.id },
+      where: { consumed: false, instanceId: _instance.id, keyFromMe: false },
     });
     const messages_sent = [];
     console.log('Retry sent : ' + not_consumed.length);
@@ -1861,9 +1951,16 @@ export class WAStartupService {
         isGroup: isJidGroup(message.keyRemoteJid),
       } as PrismType.Message;
 
-      const success_webhook = await this.sendDataWebhook('messagesUpsert', messageRaw);
+      const success_webhook = await this.retrySendDataWebhook(
+        'messagesUpsert',
+        messageRaw,
+        _instance,
+        _webhook,
+      );
       if (success_webhook != 200) {
-        throw new InternalServerErrorException('Webhook not connected!');
+        throw new InternalServerErrorException(
+          'Webhook not connected! ' + success_webhook,
+        );
       } else {
         await this.repository.message.update({
           where: { id: message.id },
