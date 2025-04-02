@@ -1852,10 +1852,13 @@ export class WAStartupService {
         keyRemoteJid: message.keyRemoteJid,
         keyFromMe: message.keyFromMe,
         pushName: message.pushName,
+        keyParticipant: message.keyParticipant,
         messageType: message.messageType,
         content: message.content as PrismType.Prisma.JsonValue,
         messageTimestamp: message.messageTimestamp as number,
-        instanceId: message.instanceId,
+        instanceId: _instance.id,
+        device: getDevice(message.keyId),
+        isGroup: isJidGroup(message.keyRemoteJid),
       } as PrismType.Message;
 
       const success_webhook = await this.sendDataWebhook('messagesUpsert', messageRaw);
